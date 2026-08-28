@@ -1,0 +1,8 @@
+services:
+  recomendaciones-svc:
+    build: .
+    image: duoc/jv0101-caso03-recomendaciones:1.0.0
+    container_name: caso03-recomendaciones-svc
+    ports:
+      - "${PORT:-8080}:8080"
+    restart: unless-stopped

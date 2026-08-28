@@ -1,0 +1,38 @@
+@startuml Secuencia-Recomendacion
+title ms-recomendaciones — Diagrama de secuencia: consolidación batch y consulta de reportes
+
+skinparam responseMessageBelowArrow true
+skinparam maxMessageSize 320
+skinparam sequenceMessageAlignment center
+skinparam roundCorner 8
+autonumber "<b>0."
+
+participant "Servicios productores" as prod #D5E8D4
+participant "EventBridge / SQS" as ev #F8CECC
+box "ms-recomendaciones" #FFF2CC
+  participant "EventoProcessor (Lambda)" as fn
+  participant "AgregadorService" as agg
+  participant "DataLakeWriter" as lake
+end box
+participant "S3 (data lake)" as s3 #F8CECC
+participant "API de reportes" as apir #E1D5E7
+
+== Consolidación por lotes ==
+prod -> ev : publican eventos de dominio
+ev -> fn : dispara el procesamiento (ventana batch)
+fn -> agg : consolida los eventos de la ventana
+agg -> lake : escribe los agregados
+lake -> s3 : persiste cifrado (KMS)
+
+== Consulta de reportes ==
+apir -> s3 : SELECT sobre el data lake (Athena)
+s3 --> apir : resultados agregados
+apir --> prod : reportes e indicadores
+note over fn, s3
+  <b>CQRS-lite (IE10)</b>
+  Los reportes leen del data lake: las bases
+  transaccionales nunca reciben carga analítica.
+  Serverless escala a cero fuera de las ventanas.
+end note
+
+@enduml

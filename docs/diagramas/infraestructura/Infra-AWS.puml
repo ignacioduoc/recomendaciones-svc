@@ -1,0 +1,54 @@
+@startuml Infra-AWS
+' =====================================================================
+' ms-recomendaciones — Infraestructura AWS (solo este microservicio)
+'   Rojo  = controles de seguridad (IE7)
+'   Azul  = puntos de monitoreo (IE8)
+' =====================================================================
+!include <awslib/all>
+!include <awslib/Groups/VPC.puml>
+!include <awslib/Groups/PrivateSubnet.puml>
+!include <awslib/Groups/SecurityGroup.puml>
+
+title ms-recomendaciones — Infraestructura AWS (caso caso03 · StreamVerse)
+
+skinparam defaultTextAlignment center
+skinparam roundCorner 8
+skinparam ArrowColor #37474F
+skinparam nodesep 30
+skinparam ranksep 40
+
+Users(users, "Suscriptor", "Administra su plan y pagos recurrentes")
+APIGateway(apigw, "API Gateway", "ruta /api/recomendaciones\nJWT + throttling")
+Cognito(cognito, "Cognito", "JWT por rol")
+
+VPCGroup(vpc, "VPC StreamVerse")
+Lambda(fn, "ms-recomendaciones (Lambda)", "consolida eventos del dominio")
+SimpleStorageService(s3, "S3 data lake", "histórico cifrado (KMS)")
+ElasticLoadBalancing(alb, "ALB · target group ms-recomendaciones", "health check /actuator/health")
+EventBridge(bus, "EventBridge / SQS", "eventos de los productores")
+CloudWatch(cw, "CloudWatch", "métricas de las ventanas batch")
+KeyManagementService(kms, "KMS", "cifrado del data lake")
+IdentityAccessManagementPermissions(iam, "IAM task role", "solo SU bucket y SU bus")
+CloudTrail(trail, "CloudTrail", "auditoría de acceso al data lake")
+
+SecurityGroupGroup(sgApp, "SG ms-recomendaciones")
+
+users --> apigw
+apigw --> alb
+bus --> fn : dispara el procesamiento
+fn --> s3 : escribe agregados cifrados
+trail .[#1565C0].> s3 : logs de auditoría
+apigw .[#B71C1C].> cognito : autenticación (JWT)
+s3 .[#B71C1C].> kms : cifrado at-rest
+fn .[#B71C1C].> iam : permisos mínimos
+
+legend right
+  |= Elemento |= Decisión (requisito) |
+  | Lambda + Athena | Carga intermitente: serverless escala a cero |
+  | S3 + KMS | Histórico inmutable y cifrado |
+  | BD propia | Aislamiento de datos por dominio (IE9/IE10) |
+  |<#B71C1C>|  Controles de seguridad (IE7) |
+  |<#1565C0]|  Puntos de monitoreo (IE8) |
+endlegend
+
+@enduml

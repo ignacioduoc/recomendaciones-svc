@@ -1,0 +1,23 @@
+@startuml C4-1-Contexto
+!include <C4/C4_Context>
+
+title ms-recomendaciones — C4 Nivel 1: Contexto
+
+LAYOUT_WITH_LEGEND()
+
+Person(actor, "Suscriptor", "Administra su plan y pagos recurrentes")
+System(sys, "ms-recomendaciones", "Recomendaciones del caso caso03: convierte los eventos del negocio en información: consolida métricas, reportes y detección de patrones sobre un data lake, sin golpear jamás las bases de datos transaccionales")
+
+System_Ext(core, "ms-suscripciones", "Suscripciones del caso (servicio central)")
+System_Ext(notif, "ms-notificaciones", "Notificaciones del caso")
+System_Ext(cognito, "Amazon Cognito", "Autenticación y JWT por rol")
+System_Ext(bus, "Amazon EventBridge", "Bus de eventos de dominio")
+
+Rel(actor, sys, "Usa el servicio", "HTTPS / REST + JWT")
+Rel(sys, core, "Suscripciones del caso (servicio central)", "REST / eventos")
+Rel_Back(notif, sys, "Notificaciones del caso", "EventBridge / SQS")
+Rel_Back(cognito, sys, "Autenticación y JWT por rol", "JWT")
+Rel(sys, bus, "Bus de eventos de dominio", "AWS SDK")
+
+SHOW_LEGEND()
+@enduml

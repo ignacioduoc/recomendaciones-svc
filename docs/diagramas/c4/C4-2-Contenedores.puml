@@ -1,0 +1,25 @@
+@startuml C4-2-Contenedores
+!include <C4/C4_Container>
+
+title ms-recomendaciones — C4 Nivel 2: Contenedores
+
+LAYOUT_WITH_LEGEND()
+
+Person(actor, "Suscriptor", "Administra su plan y pagos recurrentes")
+System_Boundary(sb, "ms-recomendaciones (dominio de Recomendaciones)") {
+  Container(api, "API de Recomendaciones", "Spring Boot 3 · Java 21 · ECS Fargate", "Expone /api/recomendaciones y persiste el dominio con su propia base de datos")
+  Container(fn, "Procesador de eventos", "AWS Lambda", "Consolida los eventos del dominio hacia el data lake")
+  ContainerDb(lake, "Data lake", "Amazon S3 (cifrado)", "Histórico de eventos del dominio")
+}
+
+Container(apigw, "API Gateway", "Amazon API Gateway", "JWT + throttling")
+Container(ev, "Amazon EventBridge / SQS", "Servicio AWS", "Eventos de dominio de los servicios operacionales")
+Container(apir, "API de reportes", "API Gateway + Athena", "Consultas SQL sobre el data lake")
+
+Rel(actor, apigw, "Usa la API", "HTTPS + JWT")
+Rel(ev, fn, "Dispara el procesamiento", "AWS SDK")
+Rel(fn, lake, "Escribe los agregados", "AWS SDK")
+Rel(apir, lake, "Consulta los reportes", "SQL (Athena)")
+
+SHOW_LEGEND()
+@enduml

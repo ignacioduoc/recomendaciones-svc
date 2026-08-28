@@ -1,0 +1,25 @@
+@startuml C4-3-Componentes
+!include <C4/C4_Component>
+
+title ms-recomendaciones — C4 Nivel 3: Componentes internos
+
+LAYOUT_WITH_LEGEND()
+
+Person(actor, "Suscriptor", "Administra su plan y pagos recurrentes")
+Container_Boundary(ms, "ms-recomendaciones — Spring Boot 3 (ECS Fargate)") {
+
+  Component(fn, "EventoProcessor", "AWS Lambda (Java 21)", "Consolida los eventos del dominio hacia el data lake")
+  Component(agg, "AgregadorService", "Java 21", "Calcula los indicadores del negocio sobre los eventos consolidados")
+  ComponentDb(lake, "DataLakeWriter", "AWS SDK (S3)", "Escritura de agregados en el data lake cifrado")
+}
+
+Container(ev, "Amazon EventBridge / SQS", "Servicio AWS", "Eventos de dominio de los productores")
+Container(apir, "API de reportes", "API Gateway + Athena", "Consultas SQL de los reportes")
+
+Rel(ev, fn, "Dispara el procesamiento", "AWS SDK")
+Rel(fn, agg, "Consolida los eventos")
+Rel(agg, lake, "Escribe los agregados", "AWS SDK")
+Rel(apir, lake, "Consulta los reportes", "SQL (Athena)")
+
+SHOW_LEGEND()
+@enduml
