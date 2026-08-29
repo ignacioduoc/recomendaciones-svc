@@ -71,3 +71,8 @@ Elegimos GitFlow para este proyecto.
 Pensamos también en GitHub Flow y en trunk-based, pero el curso dura todo el semestre y cada entrega se construye sobre la anterior. Por eso nos convenía tener una rama develop separada de main. Así main queda siempre estable, y los cambios se van integrando en develop antes de pasar a producción.
 
 Otra cosa que pesó en la decisión fue poder manejar imprevistos sin frenar el resto del trabajo. Si algo falla en la versión ya entregada, queremos poder corregirlo aparte, sin que eso choque con lo que se está desarrollando en paralelo.
+
+## Uso de Inteligencia Artificial
+
+Se utilizó IA (Claude) como apoyo para entender la estructura del proyecto, nos guia en los 
+comandos de Git y GitHub, y pediamos que nos explicara el funcionamiento de cada línea de código que realizabamos, con el fin de reforzar nuestros conocimientos. Las redacciones finales sobre el README fueron hechas por el equipo.
