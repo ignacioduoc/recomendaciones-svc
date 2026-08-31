@@ -76,3 +76,25 @@ Otra cosa que pesó en la decisión fue poder manejar imprevistos sin frenar el 
 
 Se utilizó IA (Claude) como apoyo para entender la estructura del proyecto, nos guia en los 
 comandos de Git y GitHub, y pediamos que nos explicara el funcionamiento de cada línea de código que realizabamos, con el fin de reforzar nuestros conocimientos. Las redacciones finales sobre el README fueron hechas por el equipo.
+
+## Buenas practicas
+
+## Commits 
+Usamos este formato para los mensajes
+
+    Feat: cuando agregamos algo nuevo
+    fix: cuando corregimos algun error
+    docs: solo cambios de documentacion
+    chore: cambios de configuracion o mantenimiento
+
+Ejemplos:
+
+    docs: agregar changelogs
+    fix: corregir typo en readme
+
+## Nombre de las ramas
+
+    Main: Rama de produccion
+    develop: Donde se integran los features
+    feature: para las nuevas funcionalidades
+    hotfix:  para correciones urgentes del main
