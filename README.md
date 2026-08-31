@@ -44,7 +44,7 @@ La documentación completa está en la carpeta [`docs/`](docs/):
 - [`docs/05_Justificacion.md`](docs/05_Justificacion.md) — justificación del servicio: RF/RNF/seguridad cubiertos, stack y por qué cada tecnología AWS
 - [`docs/diagramas/`](docs/diagramas/) — C4 (contexto, contenedores, componentes), secuencia e infraestructura AWS — Docker, Docker Compose e integración
 
-## Cómo ejecutar locmente
+## Cómo ejecutar localmente
 
 ```bash
 mvn spring-boot:run
@@ -98,3 +98,7 @@ Ejemplos:
     develop: Donde se integran los features
     feature: para las nuevas funcionalidades
     hotfix:  para correciones urgentes del main
+
+## Reflexion Felipe Veliz
+
+En este trabajo logre comprender mas las funcionalidades de git y aprender un poco mas de los comandos basicos como  un git commit  guardar los cambios con git push y unir las ramas con git merge antes la usaba sin saber para que servian pero con este trabajo pude entender del porque el uso de ellas
