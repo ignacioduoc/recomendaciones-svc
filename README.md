@@ -106,5 +106,3 @@ En este trabajo logre comprender mas las funcionalidades de git y aprender un po
 ## Reflexion Ignacio Gonzalez
 
 Durante el proyecto logré comprender mejor las funcionalidades de git y los diferentes tipos de comandos, los cuales fuimos profundizando y, a su vez, aprendiendo para qué sirven. Esto también sirvió para empezar a trabajar en equipo y tener una mejor comunicación al respecto. Tuve varios errores de sintaxis, pero se fueron corrigiendo mediante la práctica que conllevaba el trabajo. En lo personal, entender la diferencia entre las distintas ramas que hay, como por ejemplo develop y las ramas feature, fue lo que más trabajo me costó al principio de entender.
-
-## prueba
