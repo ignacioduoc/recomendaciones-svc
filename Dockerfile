@@ -20,7 +20,9 @@ FROM eclipse-temurin:21-jre-alpine AS runtime
 # Commit que originó la imagen: lo expone /actuator/info (trazabilidad commit -> imagen -> pod)
 ARG GIT_COMMIT=local
 
-RUN addgroup -S -g 10001 app && adduser -S -D -H -u 10001 -G app app
+# Aplica los parches de seguridad publicados para los paquetes del sistema (alpine)
+RUN apk upgrade --no-cache \
+ && addgroup -S -g 10001 app && adduser -S -D -H -u 10001 -G app app
 
 WORKDIR /app
 # Archivos de la app quedan como root y solo lectura para el usuario "app"

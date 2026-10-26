@@ -271,7 +271,8 @@ jobs:
           sarif_file: trivy-imagen.sarif
           category: trivy-imagen
 
-      # Bloqueo: cualquier vulnerabilidad HIGH o CRITICAL que ya tenga parche detiene el pipeline
+      # Bloqueo: cualquier vulnerabilidad HIGH o CRITICAL que ya tenga parche detiene el pipeline.
+      # Solo se omiten las excepciones justificadas y con vencimiento de .trivyignore.yaml.
       - name: Trivy - bloqueo por vulnerabilidades HIGH/CRITICAL
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -280,6 +281,7 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          trivyignores: .trivyignore.yaml
           skip-setup-trivy: true
 
       # Bloqueo: Dockerfile o manifiestos de Kubernetes con configuración insegura
