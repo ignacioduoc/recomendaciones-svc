@@ -5,6 +5,12 @@
 - **`RecomendacionServiceTest`** — prueba de servicio con Mockito: listar, obtener, crear, actualizar (presente y ausente) y eliminar (presente y ausente).
 - **`RecomendacionControllerTest`** — prueba del contrato HTTP con `MockMvc`: 200/404/201/201·400/204 en todas las ramas.
 - **`OpenApiConfigTest`** — verifica la metadata OpenAPI.
+- **`ActuatorEndpointsTest`** — liveness/readiness (usadas por Kubernetes), `/actuator/info` con el commit desplegado, `health` sin detalles y endpoints sensibles cerrados.
+
+## En el pipeline
+
+- El job *Pruebas y cobertura* ejecuta `mvn verify` en cada push y PR; falla si una prueba falla o la cobertura de líneas baja de 100 %.
+- `scripts/smoke-test.sh` repite el ciclo CRUD contra el contenedor (Docker Compose) y contra el despliegue en Kubernetes, y comprueba el commit desplegado.
 
 ## BDD con Cucumber (alineado a endpoints)
 
