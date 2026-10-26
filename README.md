@@ -45,7 +45,7 @@ Esto sigue el modelo GitFlow de la EP1: los cambios entran por PR, se prueban y 
 | Job | Qué hace | Detiene el pipeline si… | IE |
 |---|---|---|---|
 | Pruebas y cobertura | `mvn verify`: compila, corre pruebas unitarias, MockMvc y Cucumber, y aplica la regla de cobertura JaCoCo. Publica el reporte de pruebas como *check* y la cobertura en el resumen. | falla una prueba, no hay pruebas o la cobertura de líneas baja de 100 % | IE2 |
-| Análisis de código SonarQube Cloud | Análisis estático (bugs, vulnerabilidades, code smells, duplicación, cobertura) y espera el Quality Gate. | el Quality Gate no pasa o falta `SONAR_TOKEN` | IE3 |
+| Análisis de código SonarQube Cloud | Análisis estático (bugs, vulnerabilidades, code smells, duplicación, cobertura) y espera el Quality Gate. Corre en cada PR y en `main`: el plan Free no analiza otras ramas, y a `develop` solo entra código que ya pasó el Quality Gate en su PR. | el Quality Gate no pasa o falta `SONAR_TOKEN` | IE3 |
 | Imagen Docker | Construye la imagen multi-stage con caché, verifica la política de imagen y la prueba levantando app + PostgreSQL con Docker Compose. | la imagen corre como root, no tiene HEALTHCHECK, pesa más de 400 MB, no apunta al commit, o falla la prueba de humo | IE1 |
 | Escaneo de seguridad Trivy | Busca CVE en la imagen (sistema y librerías Java) y configuración insegura en Dockerfile y manifiestos de Kubernetes. Sube los hallazgos a la pestaña *Security*. | hay vulnerabilidades HIGH/CRITICAL con parche disponible, o configuración HIGH/CRITICAL | IE3 |
 | Revisión de dependencias del PR | Compara las dependencias del PR contra la base de vulnerabilidades de GitHub. | el PR agrega una dependencia con vulnerabilidad alta o crítica | IE3 |
