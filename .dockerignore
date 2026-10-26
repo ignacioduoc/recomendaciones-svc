@@ -1,5 +1,17 @@
+# Solo pom.xml y src/ son necesarios para construir la imagen
+.git
+.github
 target/
-*.class
+docs/
+k8s/
+scripts/
+*.md
 .idea/
 .vscode/
 *.iml
+*.class
+*.log
+.env
+docker-compose*.yml
+Dockerfile
+.dockerignore

@@ -1,8 +1,68 @@
+# Entorno local y prueba de contenedores en CI: microservicio + PostgreSQL.
+#   docker compose up --build -d --wait      # levanta y espera a que ambos estén "healthy"
+#   docker compose down -v                   # baja y borra el volumen de datos
+# Kubernetes (k8s/) es el orquestador del despliegue; este archivo es para desarrollo.
+name: recomendaciones
+
 services:
-  recomendaciones-svc:
-    build: .
-    image: duoc/jv0101-caso03-recomendaciones:1.0.0
-    container_name: caso03-recomendaciones-svc
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: recomendaciones
+      POSTGRES_USER: recomendaciones
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-solo-local-cambiar}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recomendaciones -d recomendaciones"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-local}
+    image: ${IMAGE:-recomendaciones-svc:local}
     ports:
       - "${PORT:-8080}:8080"
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/recomendaciones
+      DB_USER: recomendaciones
+      DB_PASSWORD: ${DB_PASSWORD:-solo-local-cambiar}
+      JPA_DDL_AUTO: update
+      JPA_SHOW_SQL: "false"
+      H2_CONSOLE_ENABLED: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 3s
+      start_period: 60s
+      retries: 3
+    # Endurecimiento: sistema de archivos de solo lectura, sin capacidades extra
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
     restart: unless-stopped
+
+volumes:
+  db-data:
