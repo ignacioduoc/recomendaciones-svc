@@ -1,0 +1,23 @@
+# Base común a todos los entornos. Los overlays (desarrollo, produccion) ajustan
+# namespace, réplicas y límites de autoescalado.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: streamverse
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+
+resources:
+  - configmap.yaml
+  - postgres.yaml
+  - deployment.yaml
+  - service.yaml
+  - hpa.yaml
+  - pdb.yaml
+
+# El pipeline reemplaza "local" por la etiqueta trazable sha-<commit>
+images:
+  - name: recomendaciones-svc
+    newTag: local
