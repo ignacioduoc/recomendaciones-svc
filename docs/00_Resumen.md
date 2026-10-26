@@ -18,14 +18,15 @@ El servicio atiende un único dominio de negocio y tiene una sola razón de camb
 
 | Componente | Tecnología |
 |---|---|
-| Framework | Spring Boot 3.3 |
+| Framework | Spring Boot 3.5 |
 | Lenguaje | Java 21 |
 | Build | Maven |
-| Persistencia | Spring Data JPA + H2 (in-memory) |
+| Persistencia | Spring Data JPA + H2 en memoria (local) / PostgreSQL (Compose y Kubernetes) |
 | Validación | Bean Validation (`jakarta.validation`) |
 | API/Docs | springdoc-openapi — Swagger UI + OpenAPI yaml + ReDoc |
 | Calidad | JaCoCo (cobertura LINE 100%) + Cucumber (BDD REST) |
-| Contenedores | Docker + Docker Compose |
+| Contenedores | Docker multi-stage + Docker Compose + Kubernetes (kind) |
+| CI/CD | GitHub Actions: pruebas, SonarQube Cloud, Trivy, despliegue y GHCR (ver README) |
 
 ## Entradas disponibles desde la web (`/`)
 

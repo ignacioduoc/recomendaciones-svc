@@ -1,0 +1,10 @@
+# Pod Security Admission en modo "restricted": el clúster rechaza pods que corran
+# como root, escalen privilegios o no declaren seccomp (gobernanza a nivel de namespace).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: recomendaciones-dev
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

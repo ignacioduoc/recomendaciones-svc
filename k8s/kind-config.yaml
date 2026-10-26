@@ -1,0 +1,9 @@
+# Clúster local "nube simulada": 1 plano de control + 2 nodos de trabajo.
+# Uso local: kind create cluster --config k8s/kind-config.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: recomendaciones
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker

@@ -1,0 +1,24 @@
+# Entorno de desarrollo: rama develop y Pull Requests.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: recomendaciones-dev
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: desarrollo
+    includeSelectors: false
+
+patches:
+  # 2 réplicas fijas de base, el HPA puede subir hasta 3
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: recomendaciones-svc
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3

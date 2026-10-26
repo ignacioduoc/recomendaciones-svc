@@ -1,26 +1,56 @@
+# Valores por defecto = desarrollo local (H2 en memoria).
+# En Docker Compose y Kubernetes se sobrescriben con variables de entorno (PostgreSQL).
 spring:
   application:
     name: recomendaciones-svc
   datasource:
-    url: jdbc:h2:mem:recomendacionesdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: ""
+    url: ${DB_URL:jdbc:h2:mem:recomendacionesdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${DB_USER:sa}
+    password: ${DB_PASSWORD:}
   jpa:
     hibernate:
-      ddl-auto: create-drop
-    show-sql: true
+      ddl-auto: ${JPA_DDL_AUTO:create-drop}
+    show-sql: ${JPA_SHOW_SQL:true}
     open-in-view: false
   h2:
     console:
-      enabled: true
+      enabled: ${H2_CONSOLE_ENABLED:true}
       path: /h2-console
+  lifecycle:
+    # Apagado ordenado: termina las peticiones en curso antes de detener el pod
+    timeout-per-shutdown-phase: 20s
 
 server:
   port: ${PORT:8080}
+  shutdown: graceful
 
 springdoc:
   api-docs:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+
+# Actuator: solo se exponen health e info (el resto queda cerrado)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        # El pod solo recibe tráfico si también responde la base de datos
+        readiness:
+          include: readinessState,db
+  info:
+    env:
+      enabled: true
+
+# Datos de trazabilidad publicados en /actuator/info
+info:
+  app:
+    commit: ${APP_COMMIT:local}
+    pod: ${HOSTNAME:local}
