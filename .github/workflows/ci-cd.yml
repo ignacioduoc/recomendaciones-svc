@@ -114,7 +114,21 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: maven
 
+      # El plan Free de SonarQube Cloud analiza solo Pull Requests y la rama main.
+      # A develop solo entra código por PR, y ese PR ya tuvo que pasar el Quality Gate.
+      - name: Definir si este evento se analiza
+        id: alcance
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_REF" == "refs/heads/main" ]]; then
+            echo "analizar=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "analizar=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=SonarQube::Plan Free: solo se analizan Pull Requests y main. Este código ya pasó el Quality Gate en su Pull Request."
+            echo "SonarQube: rama ${GITHUB_REF_NAME} no se analiza en el plan Free; el código ya pasó el Quality Gate en su Pull Request." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Comprobar que SONAR_TOKEN esté configurado
+        if: steps.alcance.outputs.analizar == 'true'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
@@ -125,6 +139,7 @@ jobs:
 
       # qualitygate.wait=true: Maven termina con error si el Quality Gate no pasa -> bloquea el despliegue
       - name: Análisis estático y Quality Gate (bloqueante)
+        if: steps.alcance.outputs.analizar == 'true'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: >-
