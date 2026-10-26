@@ -110,6 +110,21 @@ Reportes: artefacto `reportes-pruebas` de cada ejecución (Surefire, JaCoCo HTML
 | Contenedores endurecidos | `k8s/base/*.yaml` | Sin root, sistema de archivos de solo lectura, sin capacidades, sin token de service account. |
 | Superficie mínima | `application.yml` | Actuator solo expone `health` e `info`; consola H2 y SQL en logs desactivados fuera de desarrollo local. |
 
+### Vulnerabilidades corregidas y excepciones
+
+La primera ejecución del pipeline (PR #5) bloqueó el despliegue: Trivy encontró 12 vulnerabilidades HIGH/CRITICAL y SonarQube marcó una posible credencial.
+
+| Hallazgo | Severidad | Acción |
+|---|---|---|
+| Tomcat 10.1.55 (3 CVE) | CRITICAL | Actualizado a 10.1.59 (`tomcat.version` en `pom.xml`). |
+| Jackson 2.21.4 (5 CVE) | HIGH | Actualizado a 2.21.8 (`jackson-bom.version`). |
+| Driver PostgreSQL 42.7.11 (CVE-2026-54291) | HIGH | Actualizado a 42.7.14 (`postgresql.version`). |
+| brotli-libs de alpine (CVE-2026-111497) | HIGH | `apk upgrade` en la imagen de ejecución. |
+| Spring Web MVC 6.2.19 (CVE-2026-47884, CVE-2026-47890) | CRITICAL | **Excepción con vencimiento** en [`.trivyignore.yaml`](.trivyignore.yaml): no hay parche en Spring Framework 6.2 OSS y las fallas requieren `XsltView` y Server-Sent Events, que el servicio no usa. Vence el 2027-01-31; el arreglo definitivo es migrar a Spring Boot 4. |
+| `DB_PASSWORD` en el workflow (SonarQube) | — | Marcado como falso positivo en SonarQube: es un valor aleatorio generado en cada ejecución para una base de prueba efímera. |
+
+Las excepciones solo se aplican al paso que bloquea. Los hallazgos siguen visibles en la pestaña *Security* y vuelven a bloquear el pipeline cuando vence la fecha.
+
 ### Política de bloqueo y alertas
 
 | Situación | Efecto |
@@ -285,8 +300,9 @@ Ejemplos:
 
 > **Pendiente — redactar el equipo, sin IA** (la pauta no permite IA en justificaciones técnicas).
 > Explicar con sus palabras por qué eligieron Kubernetes con kind en vez de solo Docker Compose,
-> SonarQube Cloud en vez de Snyk, los umbrales de bloqueo (HIGH/CRITICAL, 100 % de líneas)
-> y los parámetros de escalabilidad de la tabla de IE3.
+> SonarQube Cloud en vez de Snyk, los umbrales de bloqueo (HIGH/CRITICAL, 100 % de líneas),
+> los parámetros de escalabilidad de la tabla de IE3 y por qué aceptaron temporalmente las dos
+> vulnerabilidades de Spring Web MVC en vez de migrar ahora a Spring Boot 4.
 
 ## Uso de Inteligencia Artificial
 

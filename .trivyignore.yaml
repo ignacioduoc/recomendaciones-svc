@@ -1,0 +1,17 @@
+# Excepciones de seguridad aceptadas (IE3 - gobernanza).
+# Cada excepción tiene justificación y fecha de vencimiento: al vencer, Trivy vuelve
+# a bloquear el pipeline y el equipo debe revisar de nuevo.
+# Solo aplica al paso de bloqueo; los hallazgos siguen visibles en la pestaña Security.
+vulnerabilities:
+  - id: CVE-2026-47884
+    statement: >-
+      spring-webmvc 6.2.19: la falla está en XsltView. El servicio es una API REST JSON
+      y no usa vistas XSLT. No hay parche en Spring Framework 6.2 OSS; el arreglo es
+      migrar a Spring Boot 4 (Spring Framework 7.0.9+).
+    expired_at: 2027-01-31
+  - id: CVE-2026-47890
+    statement: >-
+      spring-webmvc 6.2.19: la falla afecta Server-Sent Events con vistas. El servicio no
+      usa SSE. No hay parche en Spring Framework 6.2 OSS; el arreglo es migrar a
+      Spring Boot 4 (Spring Framework 7.0.9+).
+    expired_at: 2027-01-31

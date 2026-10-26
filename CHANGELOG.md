@@ -12,6 +12,7 @@
 - Spring Boot Actuator (liveness, readiness, info con commit desplegado) y apagado ordenado.
 - Dependabot para Maven, Docker, Docker Compose y GitHub Actions.
 - Actualización a Spring Boot 3.5.16 y springdoc 2.8.17.
+- Parches de seguridad detectados por Trivy: Tomcat 10.1.59, Jackson 2.21.8, PostgreSQL JDBC 42.7.14 y paquetes de alpine; excepción documentada con vencimiento para 2 CVE de Spring Web MVC 6.2.
 
 ## [0.1.0] - Agosto 2026
 - Primera versión del microservicio de Recomendaciones (StreamVerse).
