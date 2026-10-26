@@ -1,0 +1,16 @@
+# Configuración no sensible. La contraseña de la base va en el Secret
+# "recomendaciones-db", que crea scripts/k8s-deploy.sh en cada despliegue (no se versiona).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recomendaciones-config
+  labels:
+    app.kubernetes.io/name: recomendaciones-svc
+data:
+  DB_URL: jdbc:postgresql://recomendaciones-db:5432/recomendaciones
+  DB_USER: recomendaciones
+  JPA_DDL_AUTO: update
+  JPA_SHOW_SQL: "false"
+  H2_CONSOLE_ENABLED: "false"
+  # Heap = 50% del límite de memoria del contenedor; el resto queda para metaspace e hilos
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError"
