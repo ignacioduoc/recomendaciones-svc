@@ -6,3 +6,5 @@ target/
 .vscode/
 .DS_Store
 .env
+# Archivos generados al desplegar en Kubernetes (incluye la contraseña de la base)
+k8s/.deploy/

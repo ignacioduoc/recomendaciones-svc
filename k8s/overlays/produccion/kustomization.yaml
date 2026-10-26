@@ -1,0 +1,41 @@
+# Entorno de producción: rama main. Más réplicas mínimas y mayor techo de autoescalado.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: recomendaciones-prod
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: produccion
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Deployment
+      name: recomendaciones-svc
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: recomendaciones-svc
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 6
+  # Con 3 réplicas se tolera perder 1 a la vez
+  - target:
+      kind: PodDisruptionBudget
+      name: recomendaciones-svc
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 2
