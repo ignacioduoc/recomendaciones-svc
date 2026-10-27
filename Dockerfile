@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/root/.m2 mvn -B -q package -DskipTests \
  && java -Djarmode=tools -jar target/recomendaciones-svc-*.jar extract --layers --launcher --destination /app/extracted
 
 # ---------- Etapa 2: ejecución ----------
-FROM eclipse-temurin:21-jre-alpine AS runtime
+FROM eclipse-temurin:25-jre-alpine AS runtime
 
 # Commit que originó la imagen: lo expone /actuator/info (trazabilidad commit -> imagen -> pod)
 ARG GIT_COMMIT=local
