@@ -334,3 +334,5 @@ En esta evaluacion aprendi cosas nuevas sobre Docker, Kubernetes y cómo funcion
 
 ### EP2 — Ignacio Gonzalez
 
+En esta evaluación pude aprender más sobre cómo crear un pipeline y utilizar herramientas como Docker y Kubernetes. Al principio me costó entender algunas configuraciones y solucionar los errores que iban apareciendo, pero con la práctica fui entendiendo mejor cómo funcionaba todo. También aprendí que es importante revisar y probar los cambios para asegurarse de que todo funcione correctamente antes de entregar el trabajo.
+
