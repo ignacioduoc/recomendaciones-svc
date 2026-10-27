@@ -6,7 +6,7 @@
 #  - Usuario sin privilegios (UID 10001) y HEALTHCHECK propio.
 
 # ---------- Etapa 1: compilación ----------
-FROM maven:3.9-eclipse-temurin-21-alpine AS build
+FROM maven:3.9-eclipse-temurin-26-alpine AS build
 WORKDIR /app
 COPY pom.xml ./
 RUN --mount=type=cache,target=/root/.m2 mvn -B -q dependency:go-offline
