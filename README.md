@@ -298,11 +298,11 @@ Ejemplos:
 
 ## Decisiones técnicas del equipo (EP2)
 
-> **Pendiente — redactar el equipo, sin IA** (la pauta no permite IA en justificaciones técnicas).
-> Explicar con sus palabras por qué eligieron Kubernetes con kind en vez de solo Docker Compose,
-> SonarQube Cloud en vez de Snyk, los umbrales de bloqueo (HIGH/CRITICAL, 100 % de líneas),
-> los parámetros de escalabilidad de la tabla de IE3 y por qué aceptaron temporalmente las dos
-> vulnerabilidades de Spring Web MVC en vez de migrar ahora a Spring Boot 4.
+Para desarrollar el pipeline CI/CD, Spring Boot quedo en la version 3.5 y lo que actualizamos fue Tomcat a la 10.1.59 y Jackson a 2.21.8 y el driver PostgreSQL a 42.7.14 ademas configuramos Docker para crear imágenes más livianas y seguras. Utilizamos Kubernetes para gestionar los contenedores y PostgreSQL para mantener los datos compartidos entre las réplicas.
+
+También incorporamos SonarQube y Trivy para revisar la calidad del código y detectar vulnerabilidades. Configuramos permisos limitados, protegimos los secretos y agregamos medidas de seguridad en Kubernetes.
+
+Por último, implementamos el escalado automático, las actualizaciones progresivas y la verificación de la versión desplegada. Además, configuramos alertas mediante issues de GitHub para registrar los errores detectados durante el pipeline.
 
 ## Uso de Inteligencia Artificial
 
@@ -313,16 +313,10 @@ comandos de Git y GitHub, y pediamos que nos explicara el funcionamiento de cada
 
 ### EP2
 
-> **Pendiente — revisar y completar el equipo.** Registro de lo que se hizo con apoyo de IA, para que lo
-> validen y lo redacten como declaración propia:
->
-> - Herramienta: Claude (Anthropic), modelo Claude Opus 5.5, en claude.ai.
-> - Se usó para generar una primera versión del workflow de GitHub Actions, el Dockerfile, `docker-compose.yml`,
->   los manifiestos de Kubernetes, los scripts de `scripts/`, la configuración de Dependabot, la prueba
->   `ActuatorEndpointsTest` y la parte descriptiva de este README, incluido el diagrama del pipeline.
-> - Todo el contenido debe ser revisado, ejecutado y validado por el equipo (ver la pestaña *Actions*).
-> - Formato de cita sugerido por [bibliotecas.duoc.cl/ia](https://bibliotecas.duoc.cl/ia):
->   Anthropic. (2026). *Claude Opus 5.5* [Modelo de lenguaje de gran tamaño]. <https://claude.ai>
+Se utilizó la IA Claude como apoyo para desarrollar el pipeline CI/CD, generar y configurar los archivos necesarios para comprender el funcionamiento de cada componente mediante explicaciones que nos permitieran reforzar nuestros conocimientos. También se utilizó para apoyar la redacción descriptiva del README. Las configuraciones fueron revisadas y probadas por el equipo a través del pipeline de GitHub Actions. Las decisiones técnicas y las reflexiones personales fueron elaboradas por el equipo.
+
+Anthropic. (2026). *Claude Opus 5.5* [Modelo de lenguaje de gran tamaño]. https://claude.ai
+
 
 ## Reflexiones
 
@@ -336,8 +330,7 @@ Durante el proyecto logré comprender mejor las funcionalidades de git y los dif
 
 ### EP2 — Felipe Veliz
 
-> **Pendiente — reflexión personal, redactada sin IA** (aprendizaje y contribución al proyecto).
+En esta evaluacion aprendi cosas nuevas sobre Docker, Kubernetes y cómo funciona el pipeline de GitHub Actions Me costó entender algunas cosas al principio sobre todo cuando aparecían errores y teníamos que buscar como solucionarlos a medida que fuimos trabajando pude entender mejor para qué servia cada herramienta y cómo se relacionaban entre sí siento que aprendí bastante en comparación con la primera evaluación y que ahora entiendo mejor lo que estamos haciendo
 
 ### EP2 — Ignacio Gonzalez
 
-> **Pendiente — reflexión personal, redactada sin IA** (aprendizaje y contribución al proyecto).
