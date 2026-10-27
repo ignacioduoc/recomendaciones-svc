@@ -1,0 +1,547 @@
+# Pipeline CI/CD de recomendaciones-svc (EP2 - DOY0101 Ingeniería DevOps)
+#
+#   pruebas ──┬── analisis-codigo (SonarQube) ─────────────┐
+#             └── imagen ── escaneo-imagen (Trivy) ────────┴── despliegue (kind) ── publicar (GHCR)
+#
+#   - Pull Request a develop/main: todo excepto publicar (despliegue de revisión en clúster efímero).
+#   - Push a develop: despliega en el entorno "desarrollo".
+#   - Push a main:    despliega en el entorno "produccion".
+#   - Si falla SonarQube o Trivy, no se despliega y se abre un issue de alerta.
+#
+# Las acciones externas van fijadas por SHA completo (no por etiqueta): una etiqueta se puede
+# reescribir, como ocurrió con trivy-action en marzo de 2026 (CVE-2026-33634).
+# Dependabot actualiza estos SHA cada semana.
+
+name: CI/CD recomendaciones-svc
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+# Mínimo privilegio: cada job pide solo los permisos extra que necesita
+permissions:
+  contents: read
+
+# Un solo pipeline por rama a la vez; en PR se cancela la ejecución anterior
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  IMAGEN: recomendaciones-svc
+  JAVA_VERSION: "21"
+
+jobs:
+  # ───────────────────────────── IE2 ─────────────────────────────
+  pruebas:
+    name: Pruebas y cobertura (IE2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configurar Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # verify = compilar + unitarias + Cucumber + regla JaCoCo (falla si la cobertura baja de 100 %)
+      - name: Compilar, probar y exigir cobertura
+        run: mvn -B -ntp verify
+
+      - name: Publicar resultados de pruebas
+        if: always()
+        uses: mikepenz/action-junit-report@6ef3fdcfcd5f0b5d14df3e659ef19b8c6820f93d # v6.6.1
+        with:
+          report_paths: target/surefire-reports/TEST-*.xml
+          check_name: Resultados de pruebas
+          require_tests: true
+          include_passed: true
+          detailed_summary: true
+
+      - name: Resumen de cobertura
+        if: always()
+        run: |
+          csv=target/site/jacoco/jacoco.csv
+          if [[ ! -f "$csv" ]]; then echo "Sin reporte de cobertura." >> "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          awk -F, 'NR > 1 { bm += $6; bc += $7; lm += $8; lc += $9 }
+            END {
+              printf "### Cobertura JaCoCo\n\n| Métrica | Cubiertas | Total | %% |\n|---|---|---|---|\n"
+              printf "| Líneas | %d | %d | %.1f %% |\n", lc, lc + lm, (lc + lm) ? 100 * lc / (lc + lm) : 0
+              printf "| Ramas | %d | %d | %.1f %% |\n", bc, bc + bm, (bc + bm) ? 100 * bc / (bc + bm) : 0
+            }' "$csv" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar reportes (pruebas, cobertura y Cucumber)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reportes-pruebas
+          path: |
+            target/surefire-reports/
+            target/site/jacoco/
+            target/cucumber/
+          retention-days: 14
+
+  # ───────────────────────────── IE3 ─────────────────────────────
+  analisis-codigo:
+    name: Análisis de código SonarQube Cloud (IE3)
+    needs: pruebas
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Obtener código (historial completo para Sonar)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # El plan Free de SonarQube Cloud analiza solo Pull Requests y la rama main.
+      # A develop solo entra código por PR, y ese PR ya tuvo que pasar el Quality Gate.
+      - name: Definir si este evento se analiza
+        id: alcance
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_REF" == "refs/heads/main" ]]; then
+            echo "analizar=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "analizar=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=SonarQube::Plan Free: solo se analizan Pull Requests y main. Este código ya pasó el Quality Gate en su Pull Request."
+            echo "SonarQube: rama ${GITHUB_REF_NAME} no se analiza en el plan Free; el código ya pasó el Quality Gate en su Pull Request." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Comprobar que SONAR_TOKEN esté configurado
+        if: steps.alcance.outputs.analizar == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [[ -z "$SONAR_TOKEN" ]]; then
+            echo "::error title=Falta SONAR_TOKEN::Agrega el secreto SONAR_TOKEN en Settings > Secrets and variables > Actions (y en Dependabot). Sin análisis de código el pipeline no despliega."
+            exit 1
+          fi
+
+      # qualitygate.wait=true: Maven termina con error si el Quality Gate no pasa -> bloquea el despliegue
+      - name: Análisis estático y Quality Gate (bloqueante)
+        if: steps.alcance.outputs.analizar == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >-
+          mvn -B -ntp verify
+          org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          -Dsonar.qualitygate.wait=true
+          -Dsonar.qualitygate.timeout=300
+
+  # ───────────────────────────── IE1 ─────────────────────────────
+  imagen:
+    name: Imagen Docker (IE1)
+    needs: pruebas
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      tag: ${{ steps.etiqueta.outputs.tag }}
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # La etiqueta sha-<commit> une imagen, despliegue y registro con el commit exacto
+      - name: Definir etiqueta trazable
+        id: etiqueta
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Metadatos OCI (commit, repositorio, fecha)
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGEN }}
+          tags: type=raw,value=${{ steps.etiqueta.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=recomendaciones-svc
+            org.opencontainers.image.description=Microservicio Recomendaciones (StreamVerse)
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Construir imagen (multi-stage, caché de capas)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: GIT_COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+
+      # Política de imagen: si no se cumple, el pipeline se detiene
+      - name: Verificar política de imagen (no root, healthcheck, tamaño, commit)
+        env:
+          REF: ${{ env.IMAGEN }}:${{ steps.etiqueta.outputs.tag }}
+          TAMANO_MAXIMO_MB: "400"
+        run: |
+          usuario=$(docker image inspect -f '{{.Config.User}}' "$REF")
+          salud=$(docker image inspect -f '{{if .Config.Healthcheck}}si{{else}}no{{end}}' "$REF")
+          tamano=$(docker image inspect -f '{{.Size}}' "$REF" | awk '{ printf "%d", $1 / 1024 / 1024 }')
+          revision=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$REF")
+          {
+            echo "### Imagen \`$REF\`"
+            echo ""
+            echo "| Atributo | Valor |"
+            echo "|---|---|"
+            echo "| Tamaño | ${tamano} MB (máximo ${TAMANO_MAXIMO_MB} MB) |"
+            echo "| Usuario | \`${usuario}\` |"
+            echo "| HEALTHCHECK | ${salud} |"
+            echo "| Commit (label OCI) | \`${revision}\` |"
+            echo ""
+            echo '```'
+            docker history --format '{{.Size}}\t{{.CreatedBy}}' "$REF" | cut -c1-120 | head -15
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          case "$usuario" in ""|root|0|0:*) echo "::error::La imagen corre como root"; exit 1 ;; esac
+          [[ "$salud" == "si" ]] || { echo "::error::La imagen no define HEALTHCHECK"; exit 1; }
+          (( tamano <= TAMANO_MAXIMO_MB )) || { echo "::error::La imagen pesa ${tamano} MB"; exit 1; }
+          [[ "$revision" == "$GITHUB_SHA" ]] || { echo "::error::La imagen no apunta al commit $GITHUB_SHA"; exit 1; }
+
+      - name: Probar el contenedor con Docker Compose (app + PostgreSQL)
+        env:
+          IMAGE: ${{ env.IMAGEN }}:${{ steps.etiqueta.outputs.tag }}
+        run: |
+          export DB_PASSWORD="$(openssl rand -hex 16)"
+          docker compose up -d --no-build --wait --wait-timeout 180
+          ./scripts/smoke-test.sh http://localhost:8080 "$GITHUB_SHA"
+
+      - name: Logs de Docker Compose y limpieza
+        if: always()
+        run: |
+          docker compose logs --no-color --tail=150 || true
+          docker compose down -v || true
+
+      - name: Exportar imagen para las siguientes etapas
+        run: docker save "${IMAGEN}:${{ steps.etiqueta.outputs.tag }}" | gzip -1 > imagen.tar.gz
+
+      - name: Guardar imagen como artefacto
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: imagen-docker
+          path: imagen.tar.gz
+          retention-days: 3
+          compression-level: 0
+
+  # ───────────────────────────── IE3 ─────────────────────────────
+  escaneo-imagen:
+    name: Escaneo de seguridad Trivy (IE3)
+    needs: imagen
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      REF: recomendaciones-svc:${{ needs.imagen.outputs.tag }}
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Descargar imagen construida
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: imagen-docker
+
+      - name: Cargar imagen
+        run: docker load -i imagen.tar.gz
+
+      - name: Trivy - vulnerabilidades de la imagen (reporte SARIF)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REF }}
+          format: sarif
+          output: trivy-imagen.sarif
+          ignore-unfixed: true
+          version: v0.70.0
+
+      - name: Publicar hallazgos en la pestaña Security del repositorio
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: trivy-imagen.sarif
+          category: trivy-imagen
+
+      # Bloqueo: cualquier vulnerabilidad HIGH o CRITICAL que ya tenga parche detiene el pipeline.
+      # Solo se omiten las excepciones justificadas y con vencimiento de .trivyignore.yaml.
+      - name: Trivy - bloqueo por vulnerabilidades HIGH/CRITICAL
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REF }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore.yaml
+          skip-setup-trivy: true
+
+      # Bloqueo: Dockerfile o manifiestos de Kubernetes con configuración insegura
+      - name: Trivy - configuración insegura (Dockerfile y Kubernetes)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          skip-dirs: .cache,target
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          skip-setup-trivy: true
+
+  revision-dependencias:
+    name: Revisión de dependencias del PR (IE3)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Rechaza el PR si agrega o actualiza una dependencia con vulnerabilidad alta o crítica
+      - name: Dependency Review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+
+  grafo-dependencias:
+    name: Grafo de dependencias para Dependabot (IE3)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configurar Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # Envía el árbol completo (incluye transitivas como Tomcat o Jackson) para que
+      # las alertas de Dependabot cubran todo lo que realmente va en la imagen
+      - name: Enviar árbol de dependencias Maven
+        uses: advanced-security/maven-dependency-submission-action@a64327a7329c9939cf675e458452febe1894a70c # v6.0.1
+
+  # ─────────────────────────── IE4 · IE5 ───────────────────────────
+  despliegue:
+    name: Despliegue en Kubernetes kind (IE4, IE5)
+    needs: [imagen, escaneo-imagen, analisis-codigo]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Cada despliegue queda registrado en la pestaña "Deployments" del repositorio
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'produccion' || (github.ref == 'refs/heads/develop' && 'desarrollo' || 'revision') }}
+    env:
+      TAG: ${{ needs.imagen.outputs.tag }}
+      ENTORNO: ${{ github.ref == 'refs/heads/main' && 'produccion' || (github.ref == 'refs/heads/develop' && 'desarrollo' || 'revision') }}
+      OVERLAY: ${{ github.ref == 'refs/heads/main' && 'produccion' || 'desarrollo' }}
+      NAMESPACE: ${{ github.ref == 'refs/heads/main' && 'recomendaciones-prod' || 'recomendaciones-dev' }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Descargar imagen construida
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: imagen-docker
+
+      - name: Cargar imagen
+        run: docker load -i imagen.tar.gz
+
+      - name: Crear clúster Kubernetes (kind) como nube simulada
+        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          cluster_name: recomendaciones
+          config: k8s/kind-config.yaml
+          wait: 120s
+
+      - name: Instalar metrics-server (métricas de CPU para el HPA)
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.1/components.yaml
+          kubectl -n kube-system patch deployment metrics-server --type=json \
+            -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+          kubectl -n kube-system rollout status deployment/metrics-server --timeout=180s
+
+      # Se despliega exactamente la imagen que pasó pruebas y escaneo (mismo artefacto)
+      - name: Cargar imágenes en los nodos del clúster
+        run: |
+          docker pull postgres:17-alpine
+          kind load docker-image "${IMAGEN}:${TAG}" postgres:17-alpine --name recomendaciones
+
+      - name: Desplegar en ${{ env.ENTORNO }}
+        run: ./scripts/k8s-deploy.sh "$OVERLAY" "$TAG" "$GITHUB_SHA" "$RUN_URL"
+
+      - name: Verificar orquestación (humo, balanceo, autorecuperación)
+        run: ./scripts/k8s-verify.sh "$NAMESPACE" "$GITHUB_SHA"
+
+      - name: Demostración de autoescalado HPA (informativa)
+        continue-on-error: true
+        run: ./scripts/k8s-carga.sh "$NAMESPACE"
+
+      - name: Registro de trazabilidad del despliegue
+        if: always()
+        env:
+          ACTOR: ${{ github.actor }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          mkdir -p evidencia
+          kubectl -n "$NAMESPACE" get deploy,sts,svc,hpa,pdb,pods -o wide > evidencia/recursos.txt 2>&1 || true
+          kubectl -n "$NAMESPACE" describe deploy recomendaciones-svc > evidencia/deployment.txt 2>&1 || true
+          kubectl -n "$NAMESPACE" rollout history deploy/recomendaciones-svc > evidencia/rollout-history.txt 2>&1 || true
+          kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp > evidencia/eventos.txt 2>&1 || true
+          kubectl -n "$NAMESPACE" logs -l app.kubernetes.io/name=recomendaciones-svc --tail=200 --prefix > evidencia/logs-app.txt 2>&1 || true
+          revision=$(kubectl -n "$NAMESPACE" get deploy recomendaciones-svc \
+            -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}' 2>/dev/null || true)
+          {
+            echo "### Trazabilidad del despliegue"
+            echo ""
+            echo "| Dato | Valor |"
+            echo "|---|---|"
+            echo "| Entorno | \`${ENTORNO}\` (namespace \`${NAMESPACE}\`) |"
+            echo "| Commit | [\`${GITHUB_SHA::7}\`](${COMMIT_URL}) |"
+            echo "| Autor del cambio | ${ACTOR} |"
+            echo "| Imagen | \`${IMAGEN}:${TAG}\` |"
+            echo "| Ejecución | [#${RUN_NUMBER}](${RUN_URL}) |"
+            echo "| Revisión del Deployment | ${revision:-?} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar evidencia del despliegue
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evidencia-despliegue
+          path: evidencia/
+          retention-days: 30
+
+  publicar:
+    name: Publicar imagen en GHCR (IE4)
+    needs: [imagen, despliegue]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TAG: ${{ needs.imagen.outputs.tag }}
+    steps:
+      - name: Descargar imagen construida
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: imagen-docker
+
+      - name: Cargar imagen
+        run: docker load -i imagen.tar.gz
+
+      - name: Iniciar sesión en GitHub Container Registry
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Se publica la misma imagen probada y desplegada (mismo digest), sin reconstruir
+      - name: Etiquetar y publicar
+        env:
+          OWNER: ${{ github.repository_owner }}
+          RAMA: ${{ github.ref_name }}
+        run: |
+          destino="ghcr.io/${OWNER,,}/${IMAGEN}"
+          etiquetas=("$TAG" "$RAMA")
+          if [[ "$RAMA" == "main" ]]; then etiquetas+=("latest"); fi
+          for etiqueta in "${etiquetas[@]}"; do
+            docker tag "${IMAGEN}:${TAG}" "${destino}:${etiqueta}"
+            docker push "${destino}:${etiqueta}"
+          done
+          digest=$(docker inspect --format='{{index .RepoDigests 0}}' "${destino}:${TAG}")
+          {
+            echo "### Imagen publicada en GHCR"
+            echo ""
+            echo "- Etiquetas: \`${etiquetas[*]}\`"
+            echo "- Digest: \`${digest}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  alerta-seguridad:
+    name: Alerta por fallo de seguridad (IE3)
+    needs: [analisis-codigo, escaneo-imagen]
+    if: >-
+      always() && github.event_name == 'push' &&
+      (needs.analisis-codigo.result == 'failure' || needs.escaneo-imagen.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Abrir o actualizar issue de seguridad
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RESULTADO_SONAR: ${{ needs.analisis-codigo.result }}
+          RESULTADO_TRIVY: ${{ needs.escaneo-imagen.result }}
+        with:
+          script: |
+            const rama = context.ref.replace('refs/heads/', '');
+            const titulo = `[Seguridad] Pipeline bloqueado en ${rama}`;
+            const ejecucion = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const cuerpo = [
+              'El pipeline se detuvo antes del despliegue porque falló un control de seguridad.',
+              '',
+              '| Control | Resultado |',
+              '|---|---|',
+              `| SonarQube Cloud (Quality Gate) | ${process.env.RESULTADO_SONAR} |`,
+              `| Trivy (imagen y configuración) | ${process.env.RESULTADO_TRIVY} |`,
+              '',
+              `- Commit: ${context.sha}`,
+              `- Ejecución: ${ejecucion}`,
+              '',
+              'Revisar el detalle en la ejecución y en la pestaña Security. Cerrar el issue cuando el pipeline vuelva a verde.',
+            ].join('\n');
+            try {
+              await github.rest.issues.createLabel({ ...context.repo, name: 'seguridad', color: 'b60205' });
+            } catch (error) {
+              // la etiqueta ya existe
+            }
+            const { data: abiertos } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: 'seguridad',
+            });
+            const existente = abiertos.find((issue) => issue.title === titulo);
+            if (existente) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: existente.number, body: cuerpo });
+              core.notice(`Comentario agregado al issue #${existente.number}`);
+            } else {
+              const { data: nuevo } = await github.rest.issues.create({
+                ...context.repo, title: titulo, body: cuerpo, labels: ['seguridad'],
+              });
+              core.notice(`Issue de seguridad creado: #${nuevo.number}`);
+            }

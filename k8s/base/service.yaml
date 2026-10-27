@@ -1,0 +1,16 @@
+# Punto de entrada estable: balancea las peticiones entre las réplicas listas (readiness OK)
+apiVersion: v1
+kind: Service
+metadata:
+  name: recomendaciones-svc
+  labels:
+    app.kubernetes.io/name: recomendaciones-svc
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: recomendaciones-svc
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
