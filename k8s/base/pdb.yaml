@@ -1,0 +1,12 @@
+# Durante mantenciones del clúster (drain de nodos) siempre queda al menos 1 réplica atendiendo
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: recomendaciones-svc
+  labels:
+    app.kubernetes.io/name: recomendaciones-svc
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: recomendaciones-svc

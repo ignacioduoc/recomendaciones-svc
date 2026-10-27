@@ -1,0 +1,69 @@
+# Dependabot (IE3): revisa cada semana las dependencias de cada capa del proyecto y
+# abre Pull Requests hacia develop (GitFlow). Cada PR pasa por el pipeline completo,
+# así una actualización solo se integra si pruebas, SonarQube y Trivy siguen en verde.
+version: 2
+updates:
+  # Librerías Java (Spring Boot, springdoc, Cucumber, plugins de Maven)
+  - package-ecosystem: maven
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Santiago
+    open-pull-requests-limit: 5
+    labels: [dependencias, java]
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      spring-boot:
+        patterns: ["org.springframework.boot:*", "org.springdoc:*"]
+      pruebas:
+        patterns: ["io.cucumber:*", "org.junit*", "org.jacoco:*"]
+
+  # Imágenes base del Dockerfile y de los manifiestos de Kubernetes
+  - package-ecosystem: docker
+    directories: ["/", "/k8s/base"]
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Santiago
+    labels: [dependencias, docker]
+    commit-message:
+      prefix: chore
+      include: scope
+
+  # Imágenes de docker-compose.yml (PostgreSQL)
+  - package-ecosystem: docker-compose
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Santiago
+    labels: [dependencias, docker]
+    commit-message:
+      prefix: chore
+      include: scope
+
+  # Acciones del pipeline (actualiza los SHA fijados en .github/workflows)
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Santiago
+    labels: [dependencias, ci]
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      acciones:
+        patterns: ["*"]
