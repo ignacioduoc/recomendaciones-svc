@@ -42,7 +42,7 @@ spec:
       initContainers:
         # Espera a PostgreSQL para no entrar en reinicios al arrancar
         - name: esperar-db
-          image: postgres:17-alpine
+          image: postgres:18-alpine
           command:
             - sh
             - -c
