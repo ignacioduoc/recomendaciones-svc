@@ -13,7 +13,8 @@ RUN_URL="${4:-local}"
 case "$OVERLAY" in
   desarrollo) NAMESPACE=recomendaciones-dev ;;
   produccion) NAMESPACE=recomendaciones-prod ;;
-  *) echo "Overlay desconocido: $OVERLAY (usa desarrollo o produccion)" >&2; exit 2 ;;
+  eks) NAMESPACE=recomendaciones-eks ;;
+  *) echo "Overlay desconocido: $OVERLAY (usa desarrollo, produccion o eks)" >&2; exit 2 ;;
 esac
 
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,6 +35,7 @@ resources:
   - ../overlays/${OVERLAY}
 images:
   - name: recomendaciones-svc
+    newName: ${IMAGE_REPO:-recomendaciones-svc}
     newTag: ${TAG}
 secretGenerator:
   - name: recomendaciones-db
