@@ -394,10 +394,8 @@ jobs:
           kubectl -n kube-system rollout status deployment/metrics-server --timeout=180s
 
       # Se despliega exactamente la imagen que pasó pruebas y escaneo (mismo artefacto)
-      - name: Cargar imágenes en los nodos del clúster
-        run: |
-          docker pull postgres:17-alpine
-          kind load docker-image "${IMAGEN}:${TAG}" postgres:17-alpine --name recomendaciones
+      - name: Cargar imagen del servicio en los nodos del clúster
+        run: kind load docker-image "${IMAGEN}:${TAG}" --name recomendaciones
 
       - name: Desplegar en ${{ env.ENTORNO }}
         run: ./scripts/k8s-deploy.sh "$OVERLAY" "$TAG" "$GITHUB_SHA" "$RUN_URL"
