@@ -10,10 +10,8 @@ metadata:
   name: prometheus
 rules:
   - apiGroups: [""]
-    resources: [nodes, nodes/proxy, nodes/metrics, pods, services, endpoints]
+    resources: [nodes, nodes/metrics, pods, services, endpoints]
     verbs: [get, list, watch]
-  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
-    verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -82,6 +80,7 @@ spec:
               memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           volumeMounts:
