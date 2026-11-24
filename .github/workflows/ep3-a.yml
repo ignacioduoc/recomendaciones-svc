@@ -14,6 +14,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read # para descargar el reporte de cobertura del CI/CD del mismo commit
 
 env:
   IMAGE_REPO: ghcr.io/ignacioduoc/recomendaciones-svc
@@ -77,6 +78,10 @@ jobs:
             --from-literal=password="$GRAFANA_ADMIN_PASSWORD" \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      # Marca de tiempo para medir cuánto demora el despliegue completo (IE3)
+      - name: Registrar inicio del despliegue
+        run: echo "INICIO=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Desplegar el microservicio en EKS
         run: ./scripts/k8s-deploy.sh eks "$TAG" "$GITHUB_SHA" "$RUN_URL"
 
@@ -85,6 +90,7 @@ jobs:
           kubectl apply -k k8s/observabilidad
           kubectl -n observabilidad rollout status deployment/prometheus --timeout=180s
           kubectl -n observabilidad rollout status deployment/grafana --timeout=180s
+          kubectl -n observabilidad rollout status deployment/pushgateway --timeout=180s
 
       - name: Verificar el servicio y sus métricas por el balanceador
         run: |
@@ -105,6 +111,51 @@ jobs:
               sleep 10
             done
           done
+
+      # IE3: cobertura y tiempo de despliegue llegan al dashboard de Grafana vía Pushgateway
+      - name: Descargar reporte de cobertura del CI/CD de este commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --workflow ci-cd.yml --commit "$GITHUB_SHA" --event push \
+            --status success --json databaseId --jq '.[0].databaseId')
+          if [[ -z "$run_id" || "$run_id" == "null" ]]; then
+            echo "::error::No encontré un CI/CD exitoso para el commit ${GITHUB_SHA::7}"
+            exit 1
+          fi
+          gh run download "$run_id" --name reportes-pruebas --dir reportes
+
+      - name: Publicar métricas del pipeline en Pushgateway
+        run: |
+          csv=$(find reportes -name jacoco.csv | head -n 1)
+          if [[ -z "$csv" ]]; then
+            echo "::error::El artefacto reportes-pruebas no trae jacoco.csv"
+            exit 1
+          fi
+          cobertura=$(awk -F, 'NR > 1 { lm += $8; lc += $9 } END { printf "%.1f", (lm + lc) ? 100 * lc / (lm + lc) : 0 }' "$csv")
+          duracion=$(( $(date +%s) - INICIO ))
+          echo "Cobertura de líneas: ${cobertura} %"
+          echo "Duración del despliegue: ${duracion} s"
+
+          kubectl -n observabilidad port-forward svc/pushgateway 9091:9091 > /dev/null 2>&1 &
+          pf=$!
+          trap 'kill $pf 2>/dev/null || true' EXIT
+          for intento in $(seq 1 15); do
+            if curl -sf "http://localhost:9091/-/ready" > /dev/null; then break; fi
+            if [[ "$intento" == "15" ]]; then
+              echo "::error::Pushgateway no quedó disponible"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          cat <<EOF | curl -sf --data-binary @- "http://localhost:9091/metrics/job/pipeline-eks"
+          # TYPE ci_cobertura_lineas_percent gauge
+          ci_cobertura_lineas_percent ${cobertura}
+          # TYPE ci_despliegue_duracion_segundos gauge
+          ci_despliegue_duracion_segundos ${duracion}
+          EOF
+          echo "Métricas publicadas en Pushgateway"
 
       - name: Registro de trazabilidad del despliegue
         if: always()
