@@ -22,8 +22,18 @@ env:
   NAMESPACE: recomendaciones-eks
 
 jobs:
+  auditoria:
+    name: Auditoría y freno (IE5, IE6)
+    uses: ./.github/workflows/ep3-b.yml
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      aprobacion-produccion: true
+
   despliegue-eks:
     name: Despliegue en EKS (IE2)
+    needs: auditoria
     runs-on: ubuntu-latest
     timeout-minutes: 40
     environment:
