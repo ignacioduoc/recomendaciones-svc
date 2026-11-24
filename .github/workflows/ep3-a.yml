@@ -1,0 +1,126 @@
+# EP3 parte A (IE2): despliegue automático en Kubernetes en la nube (EKS).
+# Todo se aplica desde el pipeline con kubectl apply, nada se hace a mano.
+name: EP3-A Despliegue en EKS
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+# Un despliegue a la vez para no pisar el anterior
+concurrency:
+  group: ep3-a-eks
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_REPO: ghcr.io/ignacioduoc/recomendaciones-svc
+  CLUSTER: recomendaciones
+  NAMESPACE: recomendaciones-eks
+
+jobs:
+  despliegue-eks:
+    name: Despliegue en EKS (IE2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: eks
+    env:
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Misma etiqueta sha-<commit> que publica el CI/CD, así se despliega la imagen exacta
+      - name: Definir etiqueta de la imagen
+        run: echo "TAG=sha-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      # El CI/CD corre en paralelo y publica la imagen al final, se espera hasta 20 minutos
+      - name: Esperar a que la imagen esté publicada en GHCR
+        run: |
+          for intento in $(seq 1 40); do
+            if docker manifest inspect "${IMAGE_REPO}:${TAG}" > /dev/null 2>&1; then
+              echo "Imagen ${IMAGE_REPO}:${TAG} disponible"
+              exit 0
+            fi
+            echo "La imagen aún no está publicada (intento ${intento} de 40)"
+            sleep 30
+          done
+          echo "::error::La imagen ${TAG} no apareció en GHCR. Revisa que el CI/CD de develop haya terminado en verde"
+          exit 1
+
+      - name: Comprobar credenciales de AWS Academy
+        run: |
+          if ! aws sts get-caller-identity > /dev/null 2>&1; then
+            echo "::error::Las credenciales de AWS Academy vencieron. Renueva los secrets AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY y AWS_SESSION_TOKEN desde AWS Details"
+            exit 1
+          fi
+
+      - name: Conectar kubectl al clúster EKS
+        run: |
+          aws eks update-kubeconfig --name "$CLUSTER"
+          kubectl get nodes
+
+      # La clave de Grafana vive en un secret de GitHub y se crea en el clúster, nunca se versiona
+      - name: Crear namespace y Secret de Grafana
+        env:
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          kubectl create namespace observabilidad --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n observabilidad create secret generic grafana-admin \
+            --from-literal=password="$GRAFANA_ADMIN_PASSWORD" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Desplegar el microservicio en EKS
+        run: ./scripts/k8s-deploy.sh eks "$TAG" "$GITHUB_SHA" "$RUN_URL"
+
+      - name: Desplegar Prometheus y Grafana en el clúster
+        run: |
+          kubectl apply -k k8s/observabilidad
+          kubectl -n observabilidad rollout status deployment/prometheus --timeout=180s
+          kubectl -n observabilidad rollout status deployment/grafana --timeout=180s
+
+      - name: Verificar el servicio y sus métricas por el balanceador
+        run: |
+          host=$(kubectl -n "$NAMESPACE" get svc recomendaciones-svc \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo "Balanceador: ${host}"
+          for ruta in /actuator/health /actuator/prometheus; do
+            for intento in $(seq 1 30); do
+              codigo=$(curl -s -o /dev/null -w '%{http_code}' "http://${host}${ruta}" || true)
+              if [[ "$codigo" == "200" ]]; then
+                echo "${ruta} responde 200"
+                break
+              fi
+              if [[ "$intento" == "30" ]]; then
+                echo "::error::${ruta} no respondió 200 (último código ${codigo})"
+                exit 1
+              fi
+              sleep 10
+            done
+          done
+
+      - name: Registro de trazabilidad del despliegue
+        if: always()
+        run: |
+          {
+            echo "### Despliegue en EKS"
+            echo ""
+            echo "| Dato | Valor |"
+            echo "|---|---|"
+            echo "| Clúster | \`${CLUSTER}\` |"
+            echo "| Namespace | \`${NAMESPACE}\` |"
+            echo "| Imagen | \`${IMAGE_REPO}:${TAG}\` |"
+            echo "| Commit | \`${GITHUB_SHA::7}\` |"
+            echo ""
+            echo "\`\`\`"
+            kubectl -n "$NAMESPACE" get deploy,sts,svc,hpa,pods 2>&1 || true
+            kubectl -n observabilidad get deploy,svc,pods 2>&1 || true
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
