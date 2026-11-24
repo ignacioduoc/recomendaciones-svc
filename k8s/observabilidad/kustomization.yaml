@@ -1,5 +1,5 @@
-# Observabilidad dentro del cluster: Prometheus para métricas y Grafana para verlas.
-# Los ConfigMaps se generan desde archivos, así cualquier cambio reinicia el pod solo.
+# Observabilidad dentro del cluster: Prometheus para métricas, Pushgateway para las del pipeline
+# y Grafana para verlas. Los ConfigMaps se generan desde archivos, así cualquier cambio reinicia el pod solo.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -8,6 +8,7 @@ namespace: observabilidad
 resources:
   - namespace.yaml
   - prometheus/prometheus.yaml
+  - pushgateway/pushgateway.yaml
   - grafana/grafana.yaml
 
 configMapGenerator:
@@ -18,3 +19,9 @@ configMapGenerator:
   - name: grafana-datasources
     files:
       - grafana/datasources.yml
+  - name: grafana-dashboards-provider
+    files:
+      - grafana/dashboards.yml
+  - name: grafana-dashboards
+    files:
+      - grafana/dashboards/ep3-observabilidad.json

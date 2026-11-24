@@ -39,6 +39,8 @@ spec:
                   key: password
             - name: GF_USERS_ALLOW_SIGN_UP
               value: "false"
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: /etc/grafana/dashboards/ep3-observabilidad.json
           readinessProbe:
             httpGet:
               path: /api/health
@@ -65,6 +67,10 @@ spec:
           volumeMounts:
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /etc/grafana/dashboards
             - name: data
               mountPath: /var/lib/grafana
             - name: tmp
@@ -73,6 +79,12 @@ spec:
         - name: datasources
           configMap:
             name: grafana-datasources
+        - name: dashboards-provider
+          configMap:
+            name: grafana-dashboards-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
         - name: data
           emptyDir: {}
         - name: tmp
