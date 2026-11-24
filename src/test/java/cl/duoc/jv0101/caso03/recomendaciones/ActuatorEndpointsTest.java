@@ -6,7 +6,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,7 +17,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * si reinicia un pod o le envía tráfico, y el pipeline usa /actuator/info
  * para comprobar qué commit quedó desplegado.
  */
-@SpringBootTest(properties = "APP_COMMIT=abc1234")
+@SpringBootTest(properties = {
+    "APP_COMMIT=abc1234",
+    // En los tests Spring Boot desactiva la exportación de métricas, así que se activa para Prometheus
+    "management.prometheus.metrics.export.enabled=true"
+})
 @AutoConfigureMockMvc
 class ActuatorEndpointsTest {
 
@@ -42,6 +48,18 @@ class ActuatorEndpointsTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.app.commit").value("abc1234"))
             .andExpect(jsonPath("$.build.artifact").value("recomendaciones-svc"));
+    }
+
+    @Test
+    void prometheusExponeMetricasDeUsoYDeErrores() throws Exception {
+        // Una petición previa garantiza que exista la serie http_server_requests
+        mockMvc.perform(get("/api/recomendaciones")).andExpect(status().isOk());
+        mockMvc.perform(get("/actuator/prometheus"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("jvm_memory_used_bytes")))
+            .andExpect(content().string(containsString("process_cpu_usage")))
+            .andExpect(content().string(containsString("http_server_requests_seconds_count")))
+            .andExpect(content().string(containsString("application=\"recomendaciones-svc\"")));
     }
 
     @Test

@@ -1,0 +1,36 @@
+# Entorno en la nube (EKS). Sale de la base, igual que los otros overlays.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: recomendaciones-eks
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: eks
+    includeSelectors: false
+
+patches:
+  # En el laboratorio no hay driver de discos, así que Postgres usa un volumen temporal
+  - target:
+      kind: StatefulSet
+      name: recomendaciones-db
+    patch: |-
+      - op: remove
+        path: /spec/volumeClaimTemplates
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: data
+          emptyDir: {}
+  # Balanceador público para entrar desde internet
+  - target:
+      kind: Service
+      name: recomendaciones-svc
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: LoadBalancer

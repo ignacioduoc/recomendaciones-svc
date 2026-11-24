@@ -1,0 +1,50 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alertas.yml
+
+scrape_configs:
+  # Los pods del microservicio, encontrados solos por la API de Kubernetes
+  - job_name: recomendaciones-svc
+    metrics_path: /actuator/prometheus
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [recomendaciones-eks]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: recomendaciones-svc
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: http
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+
+  # CPU y memoria reales de cada contenedor (cgroups), leídos directo del kubelet de cada nodo
+  - job_name: kubelet-cadvisor
+    scheme: https
+    metrics_path: /metrics/cadvisor
+    tls_config:
+      insecure_skip_verify: true
+    authorization:
+      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: node
+
+  # Métricas que el pipeline empuja al Pushgateway (cobertura y tiempo de despliegue)
+  - job_name: pushgateway
+    honor_labels: true
+    static_configs:
+      - targets: ["pushgateway:9091"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

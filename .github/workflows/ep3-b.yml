@@ -1,0 +1,247 @@
+# EP3 parte B (IE5, IE6): auditoría de cumplimiento y freno del pipeline.
+#
+#   secretos ──► dependencias ──► politicas ──► aprobacion-produccion (solo si quien llama la pide)
+#      │              │               │
+#      └──────────────┴───────────────┴──► resultado (corre siempre y falla si un control no pasó)
+#
+# - Pull Request hacia develop o main: corre sola y deja el check "Resultado de auditoría (IE5, IE6)".
+# - ep3-a.yml la llama con `uses:` antes de desplegar en EKS. Si la auditoría falla, el despliegue
+#   queda en skipped. Con aprobacion-produccion: true, además espera la aprobación del environment
+#   produccion-eks.
+# - Run workflow (manual): audita cualquier rama.
+#
+# Los controles están en audit/auditoria.sh, que también se puede correr en local.
+# Las acciones van fijadas por SHA, igual que en ci-cd.yml (la misma auditoría lo verifica).
+
+name: EP3-B Auditoría y freno del pipeline
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      aprobacion-produccion:
+        description: Pedir la aprobación del environment produccion-eks al final
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      aprobacion-produccion:
+        description: Pedir la aprobación del environment produccion-eks antes de devolver el control
+        type: boolean
+        default: false
+    outputs:
+      resultado:
+        description: aprobado o bloqueado
+        value: ${{ jobs.resultado.outputs.resultado }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  JAVA_VERSION: "21"
+  GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1
+  # En el pipeline, un control que no se puede verificar cuenta como falla
+  AUDITORIA_ESTRICTA: "true"
+
+jobs:
+  # ─────────────────────────── Gate 1 · IE5 ───────────────────────────
+  secretos:
+    name: Auditoría · Secretos (IE5)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Obtener código (historial completo para revisar los commits)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # PR: los commits del PR · push: los commits nuevos · manual: los archivos actuales
+      - name: Definir qué se revisa
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          HEAD_PR: ${{ github.event.pull_request.head.sha }}
+          ANTES: ${{ github.event.before }}
+        run: |
+          if [[ "$EVENTO" == "pull_request" ]]; then
+            echo "AUDITORIA_RANGO=${BASE_PR}..${HEAD_PR}" >> "$GITHUB_ENV"
+          elif [[ "$EVENTO" == "push" && -n "$ANTES" && ! "$ANTES" =~ ^0+$ ]]; then
+            echo "AUDITORIA_RANGO=${ANTES}..${GITHUB_SHA}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Gitleaks - secretos en el código (bloquea si encuentra alguno)
+        run: bash audit/auditoria.sh secretos
+
+      - name: Guardar resultado del control
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: auditoria-secretos
+          path: reportes/auditoria/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # ─────────────────────────── Gate 2 · IE5 ───────────────────────────
+  dependencias:
+    name: Auditoría · Dependencias críticas (IE5)
+    needs: secretos
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configurar Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # Se audita el jar que se despliega: trae las versiones exactas, transitivas incluidas.
+      # Las pruebas no se repiten aquí porque ya corren en ci-cd.yml.
+      - name: Empaquetar el jar
+        run: mvn -B -ntp -DskipTests package
+
+      # Este paso además instala Trivy, que usa el script en el paso siguiente
+      - name: Trivy - reporte de dependencias HIGH/CRITICAL (pestaña Security)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: rootfs
+          scan-ref: target
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-dependencias.sarif
+          limit-severities-for-sarif: true
+          version: v0.70.0
+
+      - name: Publicar hallazgos en la pestaña Security
+        if: always() && hashFiles('trivy-dependencias.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: trivy-dependencias.sarif
+          category: trivy-dependencias
+
+      - name: Trivy - CVE críticos en el jar (bloquea si hay alguno sin excepción vigente)
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy # reutiliza la base que bajó el paso anterior
+        run: bash audit/auditoria.sh dependencias
+
+      - name: Guardar resultado del control
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: auditoria-dependencias
+          path: reportes/auditoria/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # ─────────────────────────── Gate 3 · IE5 ───────────────────────────
+  politicas:
+    name: Auditoría · Políticas del repositorio (IE5)
+    needs: dependencias
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Reglas de rama (API de GitHub), acciones por SHA, permisos, excepciones con vencimiento,
+      # archivos de credenciales y Dependabot
+      - name: Verificar políticas (bloquea si alguna no se cumple)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash audit/auditoria.sh politicas
+
+      - name: Guardar resultado del control
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: auditoria-politicas
+          path: reportes/auditoria/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # ─────────────────────────── Gate 4 · IE6 ───────────────────────────
+  # Solo corre si quien llama la pide y si pasaron los tres controles. Los revisores requeridos se
+  # configuran en Settings → Environments → produccion-eks. Si se rechaza, falla y no se despliega.
+  aprobacion-produccion:
+    name: Aprobación para producción (IE6)
+    needs: politicas
+    if: inputs.aprobacion-produccion
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: produccion-eks
+    steps:
+      - name: Registrar la aprobación
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "### Despliegue aprobado en produccion-eks"
+            echo ""
+            echo "| Dato | Valor |"
+            echo "|---|---|"
+            echo "| Commit | \`${GITHUB_SHA::7}\` |"
+            echo "| Rama | \`${GITHUB_REF_NAME}\` |"
+            echo "| Disparado por | ${GITHUB_ACTOR} |"
+            echo "| Ejecución | ${RUN_URL} |"
+            echo ""
+            echo "Quién aprobó queda registrado en la ejecución y en la pestaña Deployments."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────── Freno · IE6 ───────────────────────────
+  # Este es el check que se exige en el ruleset. Corre siempre: un job en skipped cuenta como
+  # exitoso para GitHub, así que exigir solo los gates dejaría pasar un PR con el primero en rojo.
+  resultado:
+    name: Resultado de auditoría (IE5, IE6)
+    needs: [secretos, dependencias, politicas]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      resultado: ${{ steps.reporte.outputs.resultado }}
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Reunir los resultados de cada control
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: auditoria-*
+          merge-multiple: true
+          path: reportes/auditoria
+
+      - name: Consolidar el reporte de auditoría
+        id: reporte
+        env:
+          RESULTADO_SECRETOS: ${{ needs.secretos.result }}
+          RESULTADO_DEPENDENCIAS: ${{ needs.dependencias.result }}
+          RESULTADO_POLITICAS: ${{ needs.politicas.result }}
+        run: bash audit/auditoria.sh reporte
+
+      - name: Guardar el reporte de auditoría
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reporte-auditoria
+          path: reportes/auditoria/
+          retention-days: 90
+
+      - name: Freno del pipeline
+        if: steps.reporte.outputs.resultado != 'aprobado'
+        run: |
+          echo "::error title=Pipeline detenido::La auditoría no se aprobó. Lo que depende de ella (aprobación y despliegue en EKS) queda en skipped. El detalle está en el resumen de esta ejecución."
+          exit 1

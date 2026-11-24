@@ -1,0 +1,36 @@
+# Alertas de recomendaciones-svc
+groups:
+  - name: recomendaciones-svc
+    rules:
+      # Avisa si el servicio deja de responder
+      - alert: ServicioCaido
+        expr: up{job="recomendaciones-svc"} == 0
+        for: 1m
+        labels:
+          severidad: critica
+        annotations:
+          resumen: "recomendaciones-svc no responde en {{ $labels.instance }}"
+
+      # Avisa si más del 5 % de las peticiones fallan con 5xx
+      - alert: ErroresServidorAltos
+        expr: |
+          sum(rate(http_server_requests_seconds_count{application="recomendaciones-svc", status=~"5.."}[5m]))
+          /
+          sum(rate(http_server_requests_seconds_count{application="recomendaciones-svc"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severidad: alta
+        annotations:
+          resumen: "Más del 5 % de las peticiones fallan con 5xx"
+
+      # Avisa si la memoria pasa del 85 %
+      - alert: MemoriaHeapAlta
+        expr: |
+          sum(jvm_memory_used_bytes{application="recomendaciones-svc", area="heap"})
+          /
+          sum(jvm_memory_max_bytes{application="recomendaciones-svc", area="heap"}) > 0.85
+        for: 5m
+        labels:
+          severidad: media
+        annotations:
+          resumen: "La memoria heap supera el 85 %"
