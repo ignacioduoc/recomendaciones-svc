@@ -336,3 +336,17 @@ En esta evaluacion aprendi cosas nuevas sobre Docker, Kubernetes y cómo funcion
 
 En esta evaluación pude aprender más sobre cómo crear un pipeline y utilizar herramientas como Docker y Kubernetes. Al principio me costó entender algunas configuraciones y solucionar los errores que iban apareciendo, pero con la práctica fui entendiendo mejor cómo funcionaba todo. También aprendí que es importante revisar y probar los cambios para asegurarse de que todo funcione correctamente antes de entregar el trabajo.
 
+
+### EP3 — Ignacio Gonzalez
+
+En este EP3 me tocó la parte de observabilidad e infraestructura. Dejé listo el endpoint de Prometheus, armé el stack con Grafana, Loki y Promtail, y después monté el clúster EKS con Kustomize y el pipeline de despliegue.
+
+Aprendí dos cosas concretas. Primero, que `kubectl apply -k` no aplica un YAML suelto: toma la carpeta, mezcla base y overlay, y genera el manifiesto final. Segundo, que las métricas de memoria y CPU que se ven en Grafana las saca Prometheus del kubelet a través de cAdvisor, y para eso necesita los permisos del ClusterRole.
+
+El error que más me enseñó fue el del digest en Kind. Intenté cargar la imagen de Postgres y fallaba. Al final entendí que no hacía falta y lo dejé cargando solo la del servicio. Desde entonces reviso mejor qué imágenes realmente necesito antes de meterlas al workflow.
+
+Elegí dejar la observabilidad dentro del clúster porque queda todo junto y es más fácil de mostrar. El costo es que cuando el Learner Lab se cae, se cae también Grafana y hay que renovar los secrets.
+
+Mi parte fue más de infraestructura y monitoring. Felipe está con auditoría, seguridad y Dependabot. Nos coordinamos dejando claros los puntos en el mensaje de traspaso para no pisarnos.
+
+Si tuviera más tiempo, automatizaría la renovación de los secrets de AWS. Eso me hubiera ahorrado varios problemas cada vez que el Lab se reiniciaba.
