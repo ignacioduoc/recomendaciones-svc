@@ -1,0 +1,10 @@
+# Grafana carga los dashboards desde archivos, así el dashboard queda versionado como código
+apiVersion: 1
+providers:
+  - name: ep3
+    orgId: 1
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
