@@ -27,6 +27,8 @@
         <tomcat.version>10.1.59</tomcat.version>
         <jackson-bom.version>2.21.8</jackson-bom.version>
         <postgresql.version>42.7.14</postgresql.version>
+        <log4j2.version>2.25.5</log4j2.version>
+        <commons-lang3.version>3.18.0</commons-lang3.version>
 
         <!-- SonarQube Cloud (IE3). Cambiar si la organización o la clave del proyecto son otras. -->
         <sonar.organization>ignacioduoc</sonar.organization>
