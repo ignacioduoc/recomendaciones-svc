@@ -317,6 +317,9 @@ Se utilizó la IA Claude como apoyo para desarrollar el pipeline CI/CD, generar 
 
 Anthropic. (2026). *Claude Opus 5.5* [Modelo de lenguaje de gran tamaño]. https://claude.ai
 
+### EP3
+
+Usé Claude como apoyo para guiarme paso a paso en la parte de observabilidad e infraestructura, y me fue explicando cada proceso mientras lo hacíamos para no perderme. También me ayudó a armar borradores de los manifiestos de Kubernetes, el workflow de despliegue y el dashboard de Grafana, a entender los errores del pipeline y a operar GitHub. Todo lo revisé, lo ejecuté y lo probé yo en el clúster y en el pipeline. Las justificaciones y la reflexión las escribí yo sin IA.
 
 ## Reflexiones
 
