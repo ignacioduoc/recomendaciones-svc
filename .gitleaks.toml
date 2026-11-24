@@ -1,0 +1,21 @@
+# Configuración de Gitleaks para la auditoría de secretos (EP3 · IE5).
+# Usa todas las reglas por defecto de Gitleaks y solo excluye lo que no puede tener
+# un secreto en texto: binarios, carpetas generadas y la línea apiVersion de Kubernetes
+# (por ejemplo "autoscaling/v2", que la regla genérica puede confundir con una clave).
+title = "recomendaciones-svc"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Binarios, carpetas generadas y apiVersion de Kubernetes"
+paths = [
+  '''(^|/)\.git/''',
+  '''(^|/)target/''',
+  '''(^|/)reportes/''',
+  '''\.(png|jpe?g|gif|ico|pdf)$''',
+]
+regexTarget = "line"
+regexes = [
+  '''^\s*apiVersion:\s*[\w./-]+\s*$''',
+]
