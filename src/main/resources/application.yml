@@ -30,12 +30,12 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
-# Actuator: solo se exponen health e info (el resto queda cerrado)
+# Actuator: solo se exponen health, info y prometheus (el resto queda cerrado)
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       probes:
@@ -48,6 +48,14 @@ management:
   info:
     env:
       enabled: true
+  metrics:
+    tags:
+      # Etiqueta común para filtrar este servicio en Prometheus y Grafana
+      application: ${spring.application.name}
+    distribution:
+      # Histograma de latencias de las peticiones HTTP
+      percentiles-histogram:
+        http.server.requests: true
 
 # Datos de trazabilidad publicados en /actuator/info
 info:
