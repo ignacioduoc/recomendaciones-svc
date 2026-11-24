@@ -199,6 +199,59 @@ Verificaciones automáticas en cada despliegue ([`scripts/k8s-verify.sh`](script
 
 ---
 
+---
+
+## EP3 — Observabilidad y entornos reales
+
+| Indicador | Responsable | Dónde está |
+|---|---|---|
+| IE1 Monitoreo · IE2 Kubernetes en la nube · IE3 Dashboard | Ignacio Gonzalez | [`docs/06_Observabilidad_EKS.md`](docs/06_Observabilidad_EKS.md), [`ep3-a.yml`](.github/workflows/ep3-a.yml) |
+| IE4 Documentación del pipeline | Felipe Veliz | [`docs/09_Mapa_Pipeline.md`](docs/09_Mapa_Pipeline.md) |
+| IE5 Cumplimiento y auditoría | Felipe Veliz | [`docs/07_Cumplimiento_Auditoria.md`](docs/07_Cumplimiento_Auditoria.md), [`ep3-b.yml`](.github/workflows/ep3-b.yml), [`audit/`](audit/) |
+| IE6 Freno automático del pipeline | Felipe Veliz | [`docs/08_Freno_Pipeline.md`](docs/08_Freno_Pipeline.md), [`ep3-b.yml`](.github/workflows/ep3-b.yml) |
+
+### EP3 · Políticas de cumplimiento (IE5)
+
+Archivo: [`.github/workflows/ep3-b.yml`](.github/workflows/ep3-b.yml) · Script: [`audit/auditoria.sh`](audit/auditoria.sh)
+
+| Política | Herramienta | Cómo se verifica |
+|---|---|---|
+| Todo cambio a `main` o `develop` entra por PR con checks en verde y sin force push | Ruleset `proteccion-main-develop` | `auditoria.sh` consulta la API de reglas de GitHub y falla si falta una regla |
+| Calidad y seguridad del código | SonarQube Cloud | Quality Gate bloqueante en `ci-cd.yml` |
+| Sin secretos en el código | Gitleaks | Gate `Auditoría · Secretos (IE5)` sobre los commits del PR o del push |
+| Sin CVE críticos en las librerías del jar | Trivy | Gate `Auditoría · Dependencias críticas (IE5)` |
+| Imagen sin CVE HIGH/CRITICAL con parche y configuración segura | Trivy | Job `escaneo-imagen` de `ci-cd.yml` |
+| Un PR no agrega dependencias vulnerables | Dependency Review | Job `revision-dependencias` de `ci-cd.yml` |
+| Dependencias al día | Dependabot | PR semanales; `auditoria.sh` verifica que vigile Maven, Docker y Actions |
+| Excepciones justificadas y con vencimiento de 180 días o menos | `.trivyignore.yaml` | `auditoria.sh` revisa `statement` y `expired_at` |
+| Acciones fijadas por SHA | GitHub Actions | `auditoria.sh` revisa cada `uses:` |
+| Permisos mínimos del `GITHUB_TOKEN` | `permissions:` | `auditoria.sh` exige `permissions:` en cada workflow |
+| Sin archivos de credenciales versionados | `.gitignore` | `auditoria.sh` revisa `git ls-files` |
+| El despliegue en EKS lo aprueba otra persona | Environment `produccion-eks` | Gate `Aprobación para producción (IE6)` |
+
+Cada ejecución deja un reporte en el resumen del job `Resultado de auditoría (IE5, IE6)` y en el artefacto `reporte-auditoria`. El detalle de cada control, el registro de excepciones y la revisión de Dependabot están en [`docs/07_Cumplimiento_Auditoria.md`](docs/07_Cumplimiento_Auditoria.md).
+
+### EP3 · Freno del pipeline (IE6)
+
+- Los gates corren en secuencia con `needs:`: secretos → dependencias críticas → políticas → aprobación de producción.
+- Si uno termina con código distinto de 0, los siguientes y el `Despliegue en EKS (IE2)` de `ep3-a.yml` quedan en *skipped*.
+- El ruleset exige el check `Resultado de auditoría (IE5, IE6)`, que corre siempre y falla si algún gate no pasó. Exigir solo los gates no basta, porque GitHub cuenta un job en *skipped* como exitoso.
+- El despliegue en EKS espera la aprobación del environment `produccion-eks`.
+
+Las demostraciones (secreto falso, dependencia con CVE crítico y aprobación) y sus evidencias están en [`docs/08_Freno_Pipeline.md`](docs/08_Freno_Pipeline.md).
+
+### EP3 · Mapa del pipeline (IE4)
+
+El mapa completo de `ci-cd.yml`, `ep3-b.yml` y `ep3-a.yml`, qué hace cada herramienta y la tabla panel → decisión → acción están en [`docs/09_Mapa_Pipeline.md`](docs/09_Mapa_Pipeline.md).
+
+### EP3 · Justificación técnica (IE4, IE5, IE6)
+
+> **Pendiente:** la escribe Felipe, sin IA.
+
+### EP3 · Conclusión (IE4, IE5, IE6)
+
+> **Pendiente:** la escribe Felipe, sin IA.
+
 ## Configuración inicial del repositorio (una sola vez)
 
 1. **SonarQube Cloud**
@@ -208,8 +261,9 @@ Verificaciones automáticas en cada despliegue ([`scripts/k8s-verify.sh`](script
    4. En GitHub: *Settings → Secrets and variables → Actions* → secreto `SONAR_TOKEN`. Repetir en *Secrets and variables → Dependabot* para que los PR de Dependabot también pasen el análisis.
    5. Si la organización o la clave del proyecto en SonarQube no son `ignacioduoc` / `ignacioduoc_recomendaciones-svc`, ajustar `sonar.organization` y `sonar.projectKey` en `pom.xml`.
 2. **Seguridad del código**: *Settings → Advanced Security* (o *Code security*) → activar *Dependency graph*, *Dependabot alerts* y *Dependabot security updates*.
-3. **Reglas de rama** (*Settings → Rules → Rulesets*) para `main` y `develop`: exigir Pull Request y que pasen los checks `Pruebas y cobertura (IE2)`, `Análisis de código SonarQube Cloud (IE3)`, `Imagen Docker (IE1)`, `Escaneo de seguridad Trivy (IE3)`, `Revisión de dependencias del PR (IE3)` y `Despliegue en Kubernetes kind (IE4, IE5)`.
+3. **Reglas de rama** (*Settings → Rules → Rulesets*) para `main` y `develop`: exigir Pull Request y que pasen los checks `Pruebas y cobertura (IE2)`, `Análisis de código SonarQube Cloud (IE3)`, `Imagen Docker (IE1)`, `Escaneo de seguridad Trivy (IE3)`, `Revisión de dependencias del PR (IE3)`, `Despliegue en Kubernetes kind (IE4, IE5)` y, desde la EP3, `Resultado de auditoría (IE5, IE6)`.
 4. *(Opcional)* *Settings → Environments → produccion* → *Required reviewers*: el despliegue a producción espera aprobación manual.
+   Para la EP3, el environment `produccion-eks` sí es obligatorio: revisores requeridos `velizntd` e `ignacioduoc`, *Prevent self-review* y solo la rama `develop` (ver [`docs/08_Freno_Pipeline.md`](docs/08_Freno_Pipeline.md)).
 5. *(Opcional)* Hacer público el paquete en *Packages → recomendaciones-svc → Package settings*.
 
 No hace falta cambiar los permisos de Actions: cada job declara los permisos que necesita.
@@ -259,6 +313,10 @@ Para ver los endpoints del servicio (`/`, Swagger UI, OpenAPI, ReDoc) ver [`docs
 - [`docs/03_Pruebas.md`](docs/03_Pruebas.md) — pruebas, cobertura y Cucumber
 - [`docs/04_Despliegue.md`](docs/04_Despliegue.md) — despliegue y variables de entorno
 - [`docs/05_Justificacion.md`](docs/05_Justificacion.md) — justificación del servicio (EP1)
+- [`docs/06_Observabilidad_EKS.md`](docs/06_Observabilidad_EKS.md) — monitoreo, despliegue en EKS y dashboard (EP3 · IE1, IE2, IE3)
+- [`docs/07_Cumplimiento_Auditoria.md`](docs/07_Cumplimiento_Auditoria.md) — políticas, auditoría automatizada y excepciones (EP3 · IE5)
+- [`docs/08_Freno_Pipeline.md`](docs/08_Freno_Pipeline.md) — gates en secuencia, aprobación de producción y demostraciones (EP3 · IE6)
+- [`docs/09_Mapa_Pipeline.md`](docs/09_Mapa_Pipeline.md) — mapa del pipeline y panel → decisión → acción (EP3 · IE4)
 - [`docs/diagramas/`](docs/diagramas/) — C4, secuencia e infraestructura
 
 ---
@@ -317,6 +375,10 @@ Se utilizó la IA Claude como apoyo para desarrollar el pipeline CI/CD, generar 
 
 Anthropic. (2026). *Claude Opus 5.5* [Modelo de lenguaje de gran tamaño]. https://claude.ai
 
+### EP3
+
+> **Pendiente:** declaración de uso de IA de la EP3, con la cita según [bibliotecas.duoc.cl/ia](https://bibliotecas.duoc.cl/ia).
+
 
 ## Reflexiones
 
@@ -336,3 +398,6 @@ En esta evaluacion aprendi cosas nuevas sobre Docker, Kubernetes y cómo funcion
 
 En esta evaluación pude aprender más sobre cómo crear un pipeline y utilizar herramientas como Docker y Kubernetes. Al principio me costó entender algunas configuraciones y solucionar los errores que iban apareciendo, pero con la práctica fui entendiendo mejor cómo funcionaba todo. También aprendí que es importante revisar y probar los cambios para asegurarse de que todo funcione correctamente antes de entregar el trabajo.
 
+### EP3 — Felipe Veliz
+
+> **Pendiente:** la escribe Felipe, sin IA.
