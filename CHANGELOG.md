@@ -3,6 +3,9 @@
 ## [Unreleased]
 - Se agrega archivo de changelog.
 - Página de presentación del microservicio.
+- EP3 · Auditoría automatizada de cumplimiento (`audit/auditoria.sh`): Gitleaks, Trivy sobre el jar y verificación de reglas de rama, acciones por SHA, permisos, excepciones y archivos sensibles.
+- EP3 · Workflow `ep3-b.yml`: gates en secuencia, check `Resultado de auditoría (IE5, IE6)` y aprobación del environment `produccion-eks` antes de desplegar en EKS.
+- EP3 · Documentación de cumplimiento, freno del pipeline y mapa del pipeline (`docs/07` a `docs/09`).
 
 ## [1.1.0] - Octubre 2026 (EP2 DOY0101)
 - Pipeline CI/CD en GitHub Actions: pruebas y cobertura, SonarQube Cloud, imagen Docker, Trivy, Dependency Review, despliegue en Kubernetes (kind) y publicación en GHCR.
